@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>位置情報送信システム</title>
+  <!-- Tailwind CSSを読み込み、モダンなデザインを適用します -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google FontsからInterフォントを読み込みます -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    /* カスタムメッセージボックスのフェードアウトアニメーション */
+    .fade-out {
+      animation: fadeOut 2s forwards;
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-20px); display: none; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+  <!-- メインコンテナ -->
+  <div class="bg-white p-8 rounded-xl shadow-2xl max-w-lg w-full text-center">
+    <h2 class="text-3xl font-bold text-gray-800 mb-6">位置情報送信システム</h2>
+    <p class="text-gray-600 mb-8">取得したい場所のボタンをクリックしてください。</p>
+
+    <!-- メッセージボックス (alert()の代替) -->
+    <div id="message-box" class="fixed top-8 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm transition-all duration-300 opacity-0 transform -translate-y-4 z-50 shadow-lg"></div>
+
+    <!-- 場所選択ボタンのグループ -->
+    <div class="flex flex-col sm:flex-row justify-center gap-4 mb-8">
+      <button 
+        id="location-1-btn" 
+        onclick="getLocation(1)" 
+        class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600 transition duration-300 transform hover:scale-105 active:scale-100 focus:outline-none focus:ring-4 focus:ring-blue-300">
+        場所①
+      </button>
+      <button 
+        id="location-2-btn" 
+        onclick="getLocation(2)" 
+        class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600 transition duration-300 transform hover:scale-105 active:scale-100 focus:outline-none focus:ring-4 focus:ring-blue-300">
+        場所②
+      </button>
+      <button 
+        id="location-3-btn" 
+        onclick="getLocation(3)" 
+        class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600 transition duration-300 transform hover:scale-105 active:scale-100 focus:outline-none focus:ring-4 focus:ring-blue-300">
+        場所③
+      </button>
+    </div>
+
+    <!-- 送信ボタン -->
+    <button 
+      id="send-data-btn" 
+      onclick="sendData()" 
+      class="w-full bg-green-500 text-white font-bold py-4 px-6 rounded-lg shadow-xl hover:bg-green-600 transition duration-300 transform hover:scale-105 active:scale-100 focus:outline-none focus:ring-4 focus:ring-green-300">
+      スプレッドシートへ送信
+    </button>
+  </div>
+
+  <script>
+    // Google Apps ScriptのURL
+    const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbybW5MugA8GGWpNgYiz8JpiWjzXX9uGFmsAbhePCdnOMOeEK-T7cqgBPj5XfH2MdHGV/exec';
+    
+    // 取得した位置情報を一時的に保存する配列
+    const locationData = [];
+    
+    // UI要素の参照を取得
+    const messageBox = document.getElementById('message-box');
+    const locationButtons = document.querySelectorAll('.flex > button');
+    const sendButton = document.getElementById('send-data-btn');
+
+    /**
+     * カスタムメッセージボックスにメッセージを表示します。
+     * alert()の代替として使用します。
+     * @param {string} message - 表示するメッセージ
+     * @param {string} type - 'success' または 'error'
+     */
+    function showMessage(message, type) {
+      // 既存のフェードアウトアニメーションをリセット
+      messageBox.classList.remove('fade-out', 'bg-red-500', 'bg-green-500');
+      
+      messageBox.textContent = message;
+      messageBox.style.opacity = '1';
+      messageBox.style.transform = 'translateY(0) translateX(-50%)';
+      
+      if (type === 'success') {
+        messageBox.classList.add('bg-green-500', 'text-white');
+      } else if (type === 'error') {
+        messageBox.classList.add('bg-red-500', 'text-white');
+      }
+
+      // 3秒後にメッセージを非表示にする
+      setTimeout(() => {
+        messageBox.classList.add('fade-out');
+      }, 3000);
+    }
+    
+    /**
+     * ボタンの状態を管理します
+     * @param {HTMLElement} button - 状態を変更するボタン
+     * @param {boolean} isLoading - ロード中かどうか
+     */
+    function setButtonLoading(button, isLoading) {
+      if (isLoading) {
+        button.disabled = true;
+        button.style.opacity = '0.7';
+        button.textContent = '取得中...';
+      } else {
+        button.disabled = false;
+        button.style.opacity = '1';
+        // 元のテキストに戻す
+        if (button.id === 'location-1-btn') button.textContent = '場所①';
+        if (button.id === 'location-2-btn') button.textContent = '場所②';
+        if (button.id === 'location-3-btn') button.textContent = '場所③';
+        if (button.id === 'send-data-btn') button.textContent = 'スプレッドシートへ送信';
+      }
+    }
+
+    /**
+     * ブラウザから現在地を取得し、locationData配列に保存します。
+     * @param {number} locationId - クリックされたボタンのID番号（例: 1）
+     */
+    function getLocation(locationId) {
+      // ユーザーのブラウザが位置情報APIをサポートしているか確認
+      if (!navigator.geolocation) {
+        showMessage("このブラウザでは位置情報が取得できません。", 'error');
+        return;
+      }
+      
+      // クリックされたボタンを特定
+      const buttonId = `location-${locationId}-btn`;
+      const clickedButton = document.getElementById(buttonId);
+      const locationName = `場所${locationId}`;
+      setButtonLoading(clickedButton, true);
+
+      // 位置情報の取得を開始
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // 成功時の処理
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const timestamp = new Date().toISOString();
+          
+          locationData.push({
+            locationName,
+            latitude: lat,
+            longitude: lng,
+            timestamp
+          });
+          
+          showMessage(`${locationName} の位置情報を取得しました。`, 'success');
+          setButtonLoading(clickedButton, false);
+          console.log(locationData); // デバッグ用にコンソールに出力
+        },
+        (error) => {
+          // 失敗時の処理
+          setButtonLoading(clickedButton, false);
+          
+          let errorMessage;
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = "位置情報の利用が許可されていません。ブラウザの設定を確認してください。";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = "位置情報が取得できませんでした。時間をおいて再試行してください。";
+              break;
+            case error.TIMEOUT:
+              errorMessage = "位置情報の取得がタイムアウトしました。電波の良い場所でお試しください。";
+              break;
+            default:
+              errorMessage = "位置情報の取得に失敗しました。";
+              break;
+          }
+          showMessage(errorMessage, 'error');
+          console.error("位置情報取得エラー:", error);
+        }
+      );
+    }
+    
+    /**
+     * locationData配列のデータをスプレッドシートへ送信します。
+     */
+    async function sendData() {
+      // 送信するデータがあるか確認
+      if (locationData.length === 0) {
+        showMessage("まず位置情報を取得してください。", 'error');
+        return;
+      }
+      
+      setButtonLoading(sendButton, true);
+      
+      try {
+        // Fetch APIを使用してデータをPOSTリクエストで送信
+        const response = await fetch(SPREADSHEET_URL, {
+          method: 'POST',
+          mode: 'no-cors', // レスポンスを受け取らないためno-corsモードを使用
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(locationData)
+        });
+        
+        // 成功メッセージを表示
+        showMessage("データをスプレッドシートへ送信しました！", 'success');
+        
+        // 送信が完了したら、locationData配列を空にする
+        locationData.length = 0; 
+        
+      } catch (error) {
+        // エラーが発生した場合の処理
+        showMessage("送信中にエラーが発生しました。", 'error');
+        console.error("送信エラー:", error);
+      } finally {
+        setButtonLoading(sendButton, false);
+      }
+    }
+  </script>
+</body>
+</html>
