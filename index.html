@@ -35,9 +35,9 @@
     <div id="message-box" class="fixed top-8 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm transition-all duration-300 opacity-0 transform -translate-y-4 z-50 shadow-lg"></div>
 
     <!-- 単一の機能ボタン -->
-    <button 
-      id="single-action-btn" 
-      onclick="getAndSendLocation()" 
+    <button
+      id="single-action-btn"
+      onclick="getAndSendLocation()"
       class="w-full bg-blue-500 text-white font-bold py-4 px-6 rounded-lg shadow-xl hover:bg-blue-600 transition duration-300 transform hover:scale-105 active:scale-100 focus:outline-none focus:ring-4 focus:ring-blue-300">
       ボタン
     </button>
@@ -46,7 +46,7 @@
   <script>
     // Google Apps ScriptのURL
     const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbybW5MugA8GGWpNgYiz8JpiWjzXX9uGFmsAbhePCdnOMOeEK-T7cqgBPj5XfH2MdHGV/exec';
-    
+
     // UI要素の参照を取得
     const messageBox = document.getElementById('message-box');
     const singleActionButton = document.getElementById('single-action-btn');
@@ -60,11 +60,11 @@
     function showMessage(message, type) {
       // 既存のフェードアウトアニメーションをリセット
       messageBox.classList.remove('fade-out', 'bg-red-500', 'bg-green-500');
-      
+
       messageBox.textContent = message;
       messageBox.style.opacity = '1';
       messageBox.style.transform = 'translateY(0) translateX(-50%)';
-      
+
       if (type === 'success') {
         messageBox.classList.add('bg-green-500', 'text-white');
       } else if (type === 'error') {
@@ -76,7 +76,7 @@
         messageBox.classList.add('fade-out');
       }, 3000);
     }
-    
+
     /**
      * ボタンの状態を管理します
      * @param {HTMLElement} button - 状態を変更するボタン
@@ -102,89 +102,4 @@
       button.disabled = true; // ボタンを無効化
       button.classList.remove('bg-blue-500', 'hover:bg-blue-600');
       button.classList.add('bg-green-700'); // 送信成功時の色
-      button.textContent = '送信しました';
-
-      setTimeout(() => {
-        button.classList.remove('bg-green-700');
-        button.classList.add('bg-blue-500', 'hover:bg-blue-600'); // 元の色に戻す
-        button.textContent = 'ボタン';
-        button.disabled = false; // ボタンを有効化
-      }, 1000); // 1秒後にリセット
-    }
-
-    /**
-     * ブラウザから現在地を取得し、スプレッドシートに送信します。
-     */
-    async function getAndSendLocation() {
-      // ユーザーのブラウザが位置情報APIをサポートしているか確認
-      if (!navigator.geolocation) {
-        showMessage("このブラウザでは位置情報が取得できません。", 'error');
-        return;
-      }
-      
-      setButtonLoading(singleActionButton, true);
-
-      // 位置情報の取得を開始
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          // 成功時の処理
-          try {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            const timestamp = new Date().toISOString();
-            const locationName = "ボタン";
-
-            const dataToSend = [{
-              locationName: locationName,
-              latitude: lat,
-              longitude: lng,
-              timestamp: timestamp
-            }];
-            
-            // Fetch APIを使用してデータをPOSTリクエストで送信
-            await fetch(SPREADSHEET_URL, {
-              method: 'POST',
-              mode: 'no-cors', // レスポンスを受け取らないためno-corsモードを使用
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(dataToSend)
-            });
-            
-            // 成功メッセージを表示
-            showMessage("データをスプレッドシートへ送信しました！", 'success');
-            handleSendSuccessButtonState(singleActionButton); // ボタンの状態を送信成功に変更
-          } catch (error) {
-            // 送信中にエラーが発生した場合
-            showMessage("送信中にエラーが発生しました。", 'error');
-            console.error("送信エラー:", error);
-            setButtonLoading(singleActionButton, false); // エラー時はボタンを元に戻す
-          }
-        },
-        (error) => {
-          // 失敗時の処理
-          setButtonLoading(singleActionButton, false);
-          
-          let errorMessage;
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = "位置情報の利用が許可されていません。ブラウザの設定を確認してください。";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = "位置情報が取得できませんでした。時間をおいて再試行してください。";
-              break;
-            case error.TIMEOUT:
-              errorMessage = "位置情報の取得がタイムアウトしました。電波の良い場所でお試しください。";
-              break;
-            default:
-              errorMessage = "位置情報の取得に失敗しました。";
-              break;
-          }
-          showMessage(errorMessage, 'error');
-          console.error("位置情報取得エラー:", error);
-        }
-      );
-    }
-  </script>
-</body>
-</html>
+      but
