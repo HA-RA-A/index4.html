@@ -141,7 +141,7 @@
         const position = await new Promise((resolve, reject) => {
           const geolocationTimeout = setTimeout(() => {
             reject(new Error("Geolocation timeout: No response from getCurrentPosition."));
-          }, 30000); // タイムアウトを30秒に延長 (以前は15秒)
+          }, 60000); // タイムアウトを60秒に延長 (以前は30秒)
 
           navigator.geolocation.getCurrentPosition(
             (pos) => {
@@ -152,7 +152,7 @@
               clearTimeout(geolocationTimeout); // エラー発生時もカスタムタイムアウトをクリア
               reject(err);
             },
-            { timeout: 20000 } // Geolocation API自体のタイムアウト設定を20秒に延長 (以前は10秒)
+            { timeout: 50000 } // Geolocation API自体のタイムアウト設定を50秒に延長 (以前は20秒)
           );
         });
 
