@@ -51,6 +51,8 @@
     const messageBox = document.getElementById('message-box');
     const singleActionButton = document.getElementById('single-action-btn');
 
+    let isGeolocationActive = false; // 位置情報取得がアクティブかどうかを示すフラグ
+
     /**
      * カスタムメッセージボックスにメッセージを表示します。
      * alert()の代替として使用します。
@@ -122,61 +124,69 @@
         return;
       }
 
+      // 既に位置情報取得がアクティブな場合は、重複して実行しない
+      if (isGeolocationActive) {
+        showMessage("位置情報取得が既に進行中です。", 'info');
+        return;
+      }
+
       setButtonLoading(singleActionButton, true);
+      isGeolocationActive = true; // 位置情報取得を開始
 
-      // 位置情報取得のタイムアウトをセット
-      const geolocationTimeout = setTimeout(() => {
-        // ボタンがまだ「取得中...」の状態であれば、タイムアウトとして処理
-        if (singleActionButton.disabled && singleActionButton.textContent === '取得中...') {
-          setButtonLoading(singleActionButton, false);
-          showMessage("位置情報の取得がタイムアウトしました。電波の良い場所でお試しください。", 'error');
-          console.error("Geolocation timeout: No response from getCurrentPosition.");
-        }
-      }, 15000); // 15秒後にタイムアウト
+      // UIの更新がレンダリングされるのを待つために短い遅延を入れる
+      await new Promise(resolve => setTimeout(resolve, 0)); 
 
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          clearTimeout(geolocationTimeout); // 成功したらタイムアウトをクリア
-          // 成功時の処理
-          try {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            const timestamp = new Date().toISOString();
-            const locationName = "ボタン";
+      try {
+        // Geolocation APIのPromiseラッパーとカスタムタイムアウト
+        const position = await new Promise((resolve, reject) => {
+          const geolocationTimeout = setTimeout(() => {
+            reject(new Error("Geolocation timeout: No response from getCurrentPosition."));
+          }, 15000); // 15秒後にカスタムタイムアウト
 
-            const dataToSend = [{
-              locationName: locationName,
-              latitude: lat,
-              longitude: lng,
-              timestamp: timestamp
-            }];
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              clearTimeout(geolocationTimeout); // 成功したらカスタムタイムアウトをクリア
+              resolve(pos);
+            },
+            (err) => {
+              clearTimeout(geolocationTimeout); // エラー発生時もカスタムタイムアウトをクリア
+              reject(err);
+            },
+            { timeout: 10000 } // Geolocation API自体のタイムアウト設定 (オプション)
+          );
+        });
 
-            // Fetch APIを使用してデータをPOSTリクエストで送信
-            await fetch(SPREADSHEET_URL, {
-              method: 'POST',
-              mode: 'no-cors', // レスポンスを受け取らないためno-corsモードを使用
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(dataToSend)
-            });
+        // 位置情報取得が成功した場合の処理
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const timestamp = new Date().toISOString();
+        const locationName = "ボタン";
 
-            // 成功メッセージを表示
-            showMessage("データをスプレッドシートへ送信しました！", 'success');
-            handleSendSuccessButtonState(singleActionButton); // ボタンの状態を送信成功に変更
-          } catch (error) {
-            // 送信中にエラーが発生した場合
-            showMessage("送信中にエラーが発生しました。", 'error');
-            console.error("送信エラー:", error);
-            setButtonLoading(singleActionButton, false); // エラー時はボタンを元に戻す
-          }
-        },
-        (error) => {
-          clearTimeout(geolocationTimeout); // エラー発生時もタイムアウトをクリア
-          // 失敗時の処理
-          setButtonLoading(singleActionButton, false);
+        const dataToSend = [{
+          locationName: locationName,
+          latitude: lat,
+          longitude: lng,
+          timestamp: timestamp
+        }];
 
-          let errorMessage;
+        // Fetch APIを使用してデータをPOSTリクエストで送信
+        await fetch(SPREADSHEET_URL, {
+          method: 'POST',
+          mode: 'no-cors', // レスポンスを受け取らないためno-corsモードを使用
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(dataToSend)
+        });
+
+        // 送信成功メッセージを表示し、ボタンの状態を変更
+        showMessage("データをスプレッドシートへ送信しました！", 'success');
+        handleSendSuccessButtonState(singleActionButton);
+
+      } catch (error) {
+        // 位置情報取得または送信中にエラーが発生した場合の処理
+        let errorMessage;
+        if (error.code) { // Geolocation APIからのエラーコード
           switch (error.code) {
             case error.PERMISSION_DENIED:
               errorMessage = "位置情報の利用が許可されていません。ブラウザの設定を確認してください。";
@@ -184,18 +194,30 @@
             case error.POSITION_UNAVAILABLE:
               errorMessage = "位置情報が取得できませんでした。時間をおいて再試行してください。";
               break;
-            case error.TIMEOUT:
+            case error.TIMEOUT: // Geolocation API自体のタイムアウト
               errorMessage = "位置情報の取得がタイムアウトしました。電波の良い場所でお試しください。";
               break;
             default:
               errorMessage = "位置情報の取得に失敗しました。";
               break;
           }
-          showMessage(errorMessage, 'error');
-          console.error("位置情報取得エラー:", error);
-        },
-        { timeout: 10000 } // Geolocation API自体のタイムアウト設定 (オプション)
-      );
+        } else if (error.message === "Geolocation timeout: No response from getCurrentPosition.") {
+          // カスタムタイムアウトによるエラー
+          errorMessage = "位置情報の取得がタイムアウトしました。電波の良い場所でお試しください。";
+        } else {
+          // その他の予期せぬエラー（Fetchエラーなど）
+          errorMessage = "送信中にエラーが発生しました。";
+        }
+        showMessage(errorMessage, 'error');
+        console.error("Operation error:", error);
+      } finally {
+        // 処理の成功・失敗に関わらず、位置情報取得フラグをリセット
+        isGeolocationActive = false;
+        // ボタンが「送信しました」状態でない場合にのみ、元の状態に戻す
+        if (singleActionButton.textContent !== '送信しました') {
+            setButtonLoading(singleActionButton, false);
+        }
+      }
     }
   </script>
 </body>
